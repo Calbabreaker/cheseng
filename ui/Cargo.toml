@@ -1,0 +1,10 @@
+[package]
+name = "cheseng-ui"
+version = "0.1.0"
+edition = "2021"
+authors = ["Calbabreaker <calbabreaker@gmail.com>"]
+license = "MIT"
+
+[dependencies]
+macroquad = "0.3.13"
+cheseng = { path = "../cheseng" }

@@ -1,0 +1,8 @@
+[package]
+name = "cheseng"
+version = "0.1.0"
+edition = "2021"
+authors = ["Calbabreaker <calbabreaker@gmail.com>"]
+license = "MIT"
+
+[dependencies]
