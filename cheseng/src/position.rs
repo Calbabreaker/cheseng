@@ -56,3 +56,9 @@ impl From<u8> for Position {
         Self::from_index(index)
     }
 }
+
+impl PartialEq for Position {
+    fn eq(&self, other: &Self) -> bool {
+        self.file == other.file && self.rank == other.rank
+    }
+}

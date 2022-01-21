@@ -7,7 +7,7 @@ mod utils;
 
 #[macroquad::main("Cheseng UI")]
 async fn main() {
-    let mut board_ui = BoardUI::new();
+    let mut board_ui = BoardUI::new().await;
     loop {
         let screen_view = SquareViewport::calc_for_screen();
         let board_pos = screen_view.screen_to_board_pos(mouse_position().into());

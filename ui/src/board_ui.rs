@@ -1,5 +1,9 @@
 use crate::SquareViewport;
-use macroquad::prelude::*;
+use macroquad::{
+    audio::Sound,
+    audio::{load_sound_from_bytes, play_sound, PlaySoundParams},
+    prelude::*,
+};
 
 struct PieceWrapper {
     internal_piece: cheseng::Piece,
@@ -10,17 +14,25 @@ struct PieceWrapper {
 pub struct BoardUI {
     board: cheseng::Board,
     pieces_tileset: Texture2D,
+    capture_sound: Sound,
+    move_sound: Sound,
     dragged_piece: Option<PieceWrapper>,
 }
 
 impl BoardUI {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         Self {
             board: cheseng::Board::default(),
             pieces_tileset: Texture2D::from_file_with_format(
                 include_bytes!("ChessPieces.png"),
                 None,
             ),
+            capture_sound: load_sound_from_bytes(include_bytes!("Capture.wav"))
+                .await
+                .expect("Failed to load sound!"),
+            move_sound: load_sound_from_bytes(include_bytes!("Move.wav"))
+                .await
+                .expect("Failed to load sound!"),
             dragged_piece: None,
         }
     }
@@ -51,6 +63,16 @@ impl BoardUI {
                     .iter()
                     .any(|legal_move| legal_move.end_index == end_index);
                 if is_legal_move {
+                    // play capture sound if capture else normal move
+                    play_sound(
+                        if self.board.grid[end_index as usize].is_some() {
+                            self.capture_sound
+                        } else {
+                            self.move_sound
+                        },
+                        PlaySoundParams::default(),
+                    );
+
                     self.board
                         .make_move(cheseng::Move::new(piece.index, end_index));
                 }
@@ -62,8 +84,9 @@ impl BoardUI {
     }
 
     pub fn draw(&self, screen_view: &SquareViewport) {
+        let cell_size = screen_view.cell_size;
         for (i, piece) in self.board.grid.iter().enumerate() {
-            let board_pos = cheseng::Position::from_index(i as u8);
+            let board_pos: cheseng::Position = (i as u8).into();
             let screen_pos = screen_view.board_to_screen_pos(board_pos);
 
             // draw grid squares
@@ -72,8 +95,8 @@ impl BoardUI {
             draw_rectangle(
                 screen_pos.x,
                 screen_pos.y,
-                screen_view.cell_size,
-                screen_view.cell_size,
+                cell_size,
+                cell_size,
                 if (board_pos.file + board_pos.rank) % 2 == 0 {
                     BOARD_COLOR_LIGHT
                 } else {
@@ -82,30 +105,48 @@ impl BoardUI {
             );
 
             if let Some(piece) = piece {
-                self.draw_piece(piece, screen_pos, screen_view.cell_size);
+                // don't draw the actual dragged_piece that's still on the board
+                if self
+                    .dragged_piece
+                    .as_ref()
+                    .map_or(true, |piece| piece.index != i as u8)
+                {
+                    self.draw_piece(piece, screen_pos, cell_size);
+                }
             }
         }
 
         if let Some(piece) = &self.dragged_piece {
-            // draw legal move
+            // draw legal moves
             self.draw_moves_hints(&screen_view, &piece.legal_moves);
 
             // draw actual piece
             let offset = screen_view.cell_size / 2.0;
-            self.draw_piece(
-                &piece.internal_piece,
-                Vec2::from(mouse_position()) - vec2(offset, offset),
-                screen_view.cell_size,
-            );
+            let piece_screen_pos = Vec2::from(mouse_position()) - vec2(offset, offset);
+            self.draw_piece(&piece.internal_piece, piece_screen_pos, cell_size);
         }
     }
 
     fn draw_moves_hints(&self, screen_view: &SquareViewport, moves: &Vec<cheseng::Move>) {
         let cell_size = screen_view.cell_size;
-        const MOVE_HINT_COLOR: Color = color_u8!(89, 133, 41, 255);
         for move_ in moves {
-            let screen_pos = screen_view.board_to_screen_pos(move_.end_index.into());
+            let board_pos: cheseng::Position = move_.end_index.into();
+            let screen_pos = screen_view.board_to_screen_pos(board_pos);
 
+            // if mouse on move then highlight it
+            if board_pos == screen_view.screen_to_board_pos(mouse_position().into()) {
+                const HIGHLIGHT_COLOR: Color = color_u8!(89, 133, 41, 100);
+                draw_rectangle(
+                    screen_pos.x,
+                    screen_pos.y,
+                    cell_size,
+                    cell_size,
+                    HIGHLIGHT_COLOR,
+                );
+                continue;
+            }
+
+            const MOVE_HINT_COLOR: Color = color_u8!(89, 133, 41, 255);
             if self.board.grid[move_.end_index as usize].is_some() {
                 // draw captures
                 draw_rectangle_lines(
