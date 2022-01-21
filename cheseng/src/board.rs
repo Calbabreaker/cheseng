@@ -1,8 +1,8 @@
-use crate::{Color, Error, Piece, Position};
+use crate::{Color, Error, Move, Piece, Position};
 
 pub struct Board {
-    pub grid: [Option<Piece>; 64],
     pub turn: Color,
+    pub grid: [Option<Piece>; 64],
 }
 
 impl Board {
@@ -13,8 +13,8 @@ impl Board {
         }
     }
 
-    /// Creates a new board from Forsyth-Edwards Notation
-    /// TODO: parse the remaining information
+    /// Creates a new board from Forsyth-Edwards Notation.
+    // TODO: parse the remaining information
     pub fn from_fen(fen: &str) -> Result<Self, Error> {
         let mut board = Self::empty();
         let mut sections = fen.split_whitespace();
@@ -50,7 +50,7 @@ impl Board {
                 _ => Err(Error::InvalidFENStr(char.into()))?,
             };
 
-            board.grid[pos.as_index()?] = Some(piece);
+            board.grid[pos.as_index()? as usize] = Some(piece);
             pos.file += 1;
         }
 
@@ -63,43 +63,38 @@ impl Board {
         Ok(board)
     }
 
-    /// Moves a from old_pos piece to new_pos
-    /// Will set the piece back to old_pos if it's not a legal move
-    /// Uses [is_legal_move]
-    pub fn move_piece(&mut self, old_pos: Position, new_pos: Position, piece: Piece) {
-        if let Ok(i) = self.check_legal_move(old_pos, new_pos, piece) {
-            self.grid[i] = Some(piece);
-            self.turn = if self.turn == Color::White {
-                Color::Black
-            } else {
-                Color::White
+    /// Moves a using specified move's start and end square index.
+    /// Will handle promotion, castling, etc. but will not check if its a legal move.
+    pub fn make_move(&mut self, move_: Move) {
+        let (si, ei) = (move_.start_index as usize, move_.end_index as usize);
+        let piece = self.grid[si];
+        self.grid[si] = None;
+        self.grid[ei] = piece;
+    }
+
+    pub fn generate_all_moves(&self) -> Vec<Move> {
+        let mut moves = Vec::new();
+        for (i, piece) in self.grid.iter().enumerate() {
+            if let Some(piece) = piece {
+                self.add_moves_for_piece(&mut moves, piece, i as u8);
             }
-        } else if let Ok(i) = old_pos.as_index() {
-            self.grid[i] = Some(piece);
-        }
-    }
-
-    /// Takes a piece from the board at position and returns it
-    pub fn take_piece(&mut self, position: Position) -> Option<Piece> {
-        let i = position.as_index().ok()?;
-        let piece = self.grid[i];
-        self.grid[i] = None;
-        piece
-    }
-
-    pub fn check_legal_move(
-        &mut self,
-        old_pos: Position,
-        new_pos: Position,
-        piece: Piece,
-    ) -> Result<usize, Error> {
-        let color = *piece.get_color();
-        if self.turn != color {
-            Err(Error::WrongTurn(color))?
         }
 
-        let i = new_pos.as_index()?;
-        Ok(i)
+        moves
+    }
+
+    pub fn generate_moves_for_piece(&self, piece: &Piece, index: u8) -> Vec<Move> {
+        let mut moves = Vec::new();
+        self.add_moves_for_piece(&mut moves, &piece, index);
+        moves
+    }
+
+    fn add_moves_for_piece(&self, moves: &mut Vec<Move>, piece: &Piece, index: u8) {
+        if *piece.get_color() != self.turn {
+            return;
+        }
+
+        moves.push(Move::new(index, index + 1));
     }
 }
 
