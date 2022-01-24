@@ -1,9 +1,8 @@
-use crate::Color;
-
 pub enum Error {
     InvalidFEN,
     InvalidFENStr(String),
     OutsideBounds(crate::Position),
+    InvalidPosition(Option<char>),
 }
 
 impl std::fmt::Debug for Error {
@@ -20,6 +19,12 @@ impl std::fmt::Debug for Error {
                 "OustideBounds: {:?} is ousisde 8x8 chess board",
                 position
             ),
+            Self::InvalidPosition(Some(char)) => {
+                write!(f, "InvalidPosition: Unexpected char: {}", char)
+            }
+            Self::InvalidPosition(None) => {
+                write!(f, "InvalidPosition: Expected 2 chars")
+            }
         }
     }
 }

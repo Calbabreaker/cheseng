@@ -62,40 +62,52 @@ impl Board {
             turn_str => Err(Error::InvalidFENStr(turn_str.into()))?,
         };
 
+        // TODO: castling oppotunities sections
+        sections.next();
+
+        let en_passant_char = sections.next().ok_or(Error::InvalidFEN)?;
+        if en_passant_char != "-" {
+            board.en_passant_square = Some(en_passant_char.parse::<Position>()?.as_index()?);
+        }
+
         Ok(board)
     }
 
     /// Moves a using specified move's start and end square index.
     /// Will handle promotion, castling, etc. but will not check if its a legal move.
     pub fn make_move(&mut self, move_: Move) {
-        let (si, ei) = (move_.start_index as usize, move_.end_index as usize);
-        let piece = self.grid[si];
-        self.grid[si] = None;
-        self.grid[ei] = piece;
-
-        match piece {
-            Some(Piece::Pawn(color)) => {
-                let (offset, first_rank) = match color {
-                    Color::White => (-8, 6),
-                    Color::Black => (8, 1),
-                };
-
-                let backward_index = move_.start_index as i8 + offset;
-                let start_rank = move_.start_index / 8;
-                if Some(move_.end_index) == self.en_passant_square {
-                    self.grid[backward_index as usize] = None;
-                } else if start_rank == first_rank {
-                    self.en_passant_square = Some(backward_index as u8);
-                }
-            }
-            _ => (),
-        }
+        let (start_i, end_i) = (move_.start_index as usize, move_.end_index as usize);
+        let piece = self.grid[start_i];
+        self.grid[start_i] = None;
+        self.grid[end_i] = piece;
 
         // change turns
         self.turn = match self.turn {
             Color::White => Color::Black,
             Color::Black => Color::White,
+        };
+
+        match piece {
+            Some(Piece::Pawn(color)) => {
+                let (sign, first_rank) = match color {
+                    Color::White => (-1, 6),
+                    Color::Black => (1, 1),
+                };
+
+                let (start_i, end_i) = (move_.start_index as i8, move_.end_index as i8);
+                let (start_rank, end_rank) = (start_i / 8, end_i / 8);
+                let backward_index = end_i + 8 * -sign;
+                if Some(move_.end_index) == self.en_passant_square {
+                    self.grid[backward_index as usize] = None;
+                } else if start_rank == first_rank && end_rank == first_rank + 2 * sign {
+                    self.en_passant_square = Some(backward_index as u8);
+                    return;
+                }
+            }
+            _ => (),
         }
+
+        self.en_passant_square = None;
     }
 
     pub fn move_is_capture(&self, move_: &Move) -> bool {
@@ -118,5 +130,36 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+    }
+}
+
+// TODO: Implement display fmt trait for board
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_start_en_passant() {
+        let mut board = Board::from_fen("8/8/8/pP6/8/8/8/8 w ---- a6 0 1").unwrap();
+        assert_eq!(board.en_passant_square, Some(16));
+
+        board.make_move(Move::new(25, 16)); // do en passant
+        assert_eq!(board.grid[24], None);
+    }
+
+    #[test]
+    fn test_move_into_en_passant() {
+        let mut board = Board::from_fen("8/pp6/8/1P6/8/8/8/8 w ---- - 0 1").unwrap();
+        board.make_move(Move::new(8, 24)); // do double push
+        assert_eq!(board.grid[24], Some(Piece::Pawn(Color::Black)));
+        assert_eq!(board.en_passant_square, Some(16));
+
+        board.make_move(Move::new(25, 16)); // do en passant
+        assert_eq!(board.grid[24], None);
+
+        board.make_move(Move::new(9, 17)); // singal push
+        board.make_move(Move::new(16, 9)); // try take
+        assert_eq!(board.grid[17], Some(Piece::Pawn(Color::Black)));
     }
 }

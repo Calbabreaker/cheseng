@@ -63,6 +63,31 @@ impl PartialEq for Position {
     }
 }
 
+impl std::str::FromStr for Position {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut chars = s.chars();
+        let file = match chars.next().ok_or(Error::InvalidPosition(None))? {
+            'a' => 0,
+            'b' => 1,
+            'c' => 2,
+            'd' => 3,
+            'e' => 4,
+            'f' => 5,
+            'g' => 6,
+            'h' => 7,
+            char => Err(Error::InvalidPosition(Some(char)))?,
+        };
+
+        let rank_char = chars.next().ok_or(Error::InvalidPosition(None))?;
+        let rank = 8 - rank_char
+            .to_digit(9)
+            .ok_or(Error::InvalidPosition(Some(rank_char)))?;
+        Ok(Self::new(file, rank as u8))
+    }
+}
+
 /// Alias to Position::new for short position creation
 pub const fn pos(file: u8, rank: u8) -> Position {
     Position::new(file, rank)

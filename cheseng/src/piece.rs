@@ -1,12 +1,12 @@
 use crate::{Board, Move};
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Color {
     White,
     Black,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Piece {
     Pawn(Color),
     Knight(Color),
