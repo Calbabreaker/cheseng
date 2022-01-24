@@ -21,7 +21,7 @@ impl SquareViewport {
 
     pub fn screen_to_board_pos(&self, screen_pos: Vec2) -> cheseng::Position {
         let pos = (screen_pos - self.offset_vec) / self.cell_size;
-        (pos.x as u8, pos.y as u8).into()
+        cheseng::pos(pos.x as u8, pos.y as u8)
     }
 
     // 1:1 aspect ratio centered

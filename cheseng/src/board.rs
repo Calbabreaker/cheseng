@@ -3,6 +3,7 @@ use crate::{Color, Error, Move, Piece, Position};
 pub struct Board {
     pub turn: Color,
     pub grid: [Option<Piece>; 64],
+    pub en_passant_square: Option<u8>,
 }
 
 impl Board {
@@ -10,6 +11,7 @@ impl Board {
         Self {
             grid: [None; 64],
             turn: Color::White,
+            en_passant_square: None,
         }
     }
 
@@ -70,31 +72,46 @@ impl Board {
         let piece = self.grid[si];
         self.grid[si] = None;
         self.grid[ei] = piece;
+
+        match piece {
+            Some(Piece::Pawn(color)) => {
+                let (offset, first_rank) = match color {
+                    Color::White => (-8, 6),
+                    Color::Black => (8, 1),
+                };
+
+                let backward_index = move_.start_index as i8 + offset;
+                let start_rank = move_.start_index / 8;
+                if Some(move_.end_index) == self.en_passant_square {
+                    self.grid[backward_index as usize] = None;
+                } else if start_rank == first_rank {
+                    self.en_passant_square = Some(backward_index as u8);
+                }
+            }
+            _ => (),
+        }
+
+        // change turns
+        self.turn = match self.turn {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
     }
 
-    pub fn generate_all_moves(&self) -> Vec<Move> {
+    pub fn move_is_capture(&self, move_: &Move) -> bool {
+        self.grid[move_.end_index as usize].is_some()
+            || self.en_passant_square == Some(move_.end_index)
+    }
+
+    pub fn get_all_legal_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
         for (i, piece) in self.grid.iter().enumerate() {
             if let Some(piece) = piece {
-                self.add_moves_for_piece(&mut moves, piece, i as u8);
+                piece.add_legal_moves(i as u8, &mut moves, &self);
             }
         }
 
         moves
-    }
-
-    pub fn generate_moves_for_piece(&self, piece: &Piece, index: u8) -> Vec<Move> {
-        let mut moves = Vec::new();
-        self.add_moves_for_piece(&mut moves, &piece, index);
-        moves
-    }
-
-    fn add_moves_for_piece(&self, moves: &mut Vec<Move>, piece: &Piece, index: u8) {
-        if *piece.get_color() != self.turn {
-            return;
-        }
-
-        moves.push(Move::new(index, index + 1));
     }
 }
 

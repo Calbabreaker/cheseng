@@ -19,6 +19,14 @@ pub struct BoardUI {
     dragged_piece: Option<PieceWrapper>,
 }
 
+macro_rules! load_sound {
+    ($path: expr) => {
+        load_sound_from_bytes(include_bytes!($path))
+            .await
+            .expect("Failed to load sound!")
+    };
+}
+
 impl BoardUI {
     pub async fn new() -> Self {
         Self {
@@ -27,12 +35,8 @@ impl BoardUI {
                 include_bytes!("ChessPieces.png"),
                 None,
             ),
-            capture_sound: load_sound_from_bytes(include_bytes!("Capture.wav"))
-                .await
-                .expect("Failed to load sound!"),
-            move_sound: load_sound_from_bytes(include_bytes!("Move.wav"))
-                .await
-                .expect("Failed to load sound!"),
+            capture_sound: load_sound!("Capture.wav"),
+            move_sound: load_sound!("Move.wav"),
             dragged_piece: None,
         }
     }
@@ -47,7 +51,7 @@ impl BoardUI {
                 self.dragged_piece = Some(PieceWrapper {
                     internal_piece,
                     index,
-                    legal_moves: self.board.generate_moves_for_piece(&internal_piece, index),
+                    legal_moves: internal_piece.get_legal_moves(index, &self.board),
                 });
             }
         }
@@ -58,14 +62,15 @@ impl BoardUI {
         if let Some(piece) = &self.dragged_piece {
             // make sure mouse pos is inside bounds
             if let Ok(end_index) = board_pos.as_index() {
-                let is_legal_move = piece
+                let legal_move = piece
                     .legal_moves
                     .iter()
-                    .any(|legal_move| legal_move.end_index == end_index);
-                if is_legal_move {
+                    .find(|legal_move| legal_move.end_index == end_index);
+
+                if let Some(legal_move) = legal_move {
                     // play capture sound if capture else normal move
                     play_sound(
-                        if self.board.grid[end_index as usize].is_some() {
+                        if self.board.move_is_capture(legal_move) {
                             self.capture_sound
                         } else {
                             self.move_sound
@@ -86,7 +91,7 @@ impl BoardUI {
     pub fn draw(&self, screen_view: &SquareViewport) {
         let cell_size = screen_view.cell_size;
         for (i, piece) in self.board.grid.iter().enumerate() {
-            let board_pos: cheseng::Position = (i as u8).into();
+            let board_pos = cheseng::Position::from_index(i as u8);
             let screen_pos = screen_view.board_to_screen_pos(board_pos);
 
             // draw grid squares
@@ -120,7 +125,7 @@ impl BoardUI {
             // draw legal moves
             self.draw_moves_hints(&screen_view, &piece.legal_moves);
 
-            // draw actual piece
+            // draw actual piece at mouse position
             let offset = screen_view.cell_size / 2.0;
             let piece_screen_pos = Vec2::from(mouse_position()) - vec2(offset, offset);
             self.draw_piece(&piece.internal_piece, piece_screen_pos, cell_size);
@@ -147,7 +152,7 @@ impl BoardUI {
             }
 
             const MOVE_HINT_COLOR: Color = color_u8!(89, 133, 41, 255);
-            if self.board.grid[move_.end_index as usize].is_some() {
+            if self.board.move_is_capture(move_) {
                 // draw captures
                 draw_rectangle_lines(
                     screen_pos.x,

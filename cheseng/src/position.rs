@@ -23,7 +23,7 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn new(file: u8, rank: u8) -> Self {
+    pub const fn new(file: u8, rank: u8) -> Self {
         Self { file, rank }
     }
 
@@ -61,4 +61,9 @@ impl PartialEq for Position {
     fn eq(&self, other: &Self) -> bool {
         self.file == other.file && self.rank == other.rank
     }
+}
+
+/// Alias to Position::new for short position creation
+pub const fn pos(file: u8, rank: u8) -> Position {
+    Position::new(file, rank)
 }

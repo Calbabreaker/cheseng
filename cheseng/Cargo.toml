@@ -6,3 +6,4 @@ authors = ["Calbabreaker <calbabreaker@gmail.com>"]
 license = "MIT"
 
 [dependencies]
+lazy_static = "1.4.0"

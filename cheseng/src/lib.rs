@@ -6,4 +6,4 @@ mod position;
 pub use board::Board;
 pub use error::Error;
 pub use piece::{Color, Piece};
-pub use position::{Move, Position};
+pub use position::{pos, Move, Position};
