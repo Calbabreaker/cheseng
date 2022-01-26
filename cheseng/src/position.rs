@@ -1,21 +1,5 @@
 use crate::Error;
 
-pub struct Move {
-    pub start_index: u8,
-    pub end_index: u8,
-}
-
-impl Move {
-    /// Creates a new move using start and end index
-    /// For performance, start_square and end_square will not be checked if it's outside bounds
-    pub fn new(start_index: u8, end_index: u8) -> Self {
-        Self {
-            start_index,
-            end_index,
-        }
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 pub struct Position {
     pub file: u8,

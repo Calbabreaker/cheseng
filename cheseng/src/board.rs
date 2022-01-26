@@ -1,4 +1,4 @@
-use crate::{Color, Error, Move, Piece, Position};
+use crate::{Color, Error, Move, MoveFlag, Piece, Position};
 
 pub struct Board {
     pub turn: Color,
@@ -7,6 +7,8 @@ pub struct Board {
 }
 
 impl Board {
+    pub const LETTERS: &'static str = "abcdefgh";
+
     pub fn empty() -> Self {
         Self {
             grid: [None; 64],
@@ -75,44 +77,44 @@ impl Board {
 
     /// Moves a using specified move's start and end square index.
     /// Will handle promotion, castling, etc. but will not check if its a legal move.
-    pub fn make_move(&mut self, move_: Move) {
-        let (start_i, end_i) = (move_.start_index as usize, move_.end_index as usize);
+    pub fn make_move(&mut self, raw_move: Move) {
+        let (start_i, end_i) = (raw_move.start_index as usize, raw_move.end_index as usize);
         let piece = self.grid[start_i];
         self.grid[start_i] = None;
         self.grid[end_i] = piece;
+
+        self.en_passant_square = None;
+
+        match piece {
+            Some(Piece::Pawn(color)) => {
+                let backward_index = match color {
+                    Color::White => end_i + 8,
+                    Color::Black => end_i - 8,
+                };
+
+                match raw_move.flag {
+                    MoveFlag::PawnDoublePush => {
+                        self.en_passant_square = Some(backward_index as u8);
+                    }
+                    MoveFlag::EnPassantCapture => {
+                        self.grid[backward_index] = None;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
 
         // change turns
         self.turn = match self.turn {
             Color::White => Color::Black,
             Color::Black => Color::White,
         };
-
-        match piece {
-            Some(Piece::Pawn(color)) => {
-                let (sign, first_rank) = match color {
-                    Color::White => (-1, 6),
-                    Color::Black => (1, 1),
-                };
-
-                let (start_i, end_i) = (move_.start_index as i8, move_.end_index as i8);
-                let (start_rank, end_rank) = (start_i / 8, end_i / 8);
-                let backward_index = end_i + 8 * -sign;
-                if Some(move_.end_index) == self.en_passant_square {
-                    self.grid[backward_index as usize] = None;
-                } else if start_rank == first_rank && end_rank == first_rank + 2 * sign {
-                    self.en_passant_square = Some(backward_index as u8);
-                    return;
-                }
-            }
-            _ => (),
-        }
-
-        self.en_passant_square = None;
     }
 
-    pub fn move_is_capture(&self, move_: &Move) -> bool {
-        self.grid[move_.end_index as usize].is_some()
-            || self.en_passant_square == Some(move_.end_index)
+    pub fn move_is_capture(&self, test_move: Move) -> bool {
+        self.grid[test_move.end_index as usize].is_some()
+            || self.en_passant_square == Some(test_move.end_index)
     }
 
     pub fn get_all_legal_moves(&self) -> Vec<Move> {
@@ -125,6 +127,21 @@ impl Board {
 
         moves
     }
+
+    /// Tests if the move is legal and return it with the neccessery flags set (en passant, double push)
+    /// else it will return none
+    pub fn as_legal_move(&self, test_move: Move) -> Option<Move> {
+        if let Some(piece) = self.grid[test_move.start_index as usize] {
+            let legal_moves = piece.get_legal_moves(test_move.start_index, &self);
+            let legal_move = legal_moves
+                .iter()
+                .find(|legal_move| legal_move.end_index == test_move.end_index);
+
+            legal_move.copied()
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for Board {
@@ -133,33 +150,29 @@ impl Default for Board {
     }
 }
 
-// TODO: Implement display fmt trait for board
+impl std::fmt::Display for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for (index, piece) in self.grid.iter().enumerate() {
+            if index == 0 {
+                write!(f, "   ┌───┬───┬───┬───┬───┬───┬───┬───┐\n 8 │")?;
+            } else if index % 8 == 0 {
+                write!(
+                    f,
+                    "\n   ├───┼───┼───┼───┼───┼───┼───┼───┤\n {} │",
+                    8 - index / 8
+                )?;
+            }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+            let char = piece.map_or(' ', |p| p.get_char());
+            write!(f, " {} │", char)?;
+        }
 
-    #[test]
-    fn test_start_en_passant() {
-        let mut board = Board::from_fen("8/8/8/pP6/8/8/8/8 w ---- a6 0 1").unwrap();
-        assert_eq!(board.en_passant_square, Some(16));
+        write!(f, "\n   └───┴───┴───┴───┴───┴───┴───┴───┘\n   ")?;
 
-        board.make_move(Move::new(25, 16)); // do en passant
-        assert_eq!(board.grid[24], None);
-    }
+        for letter in Board::LETTERS.chars() {
+            write!(f, "  {} ", letter)?;
+        }
 
-    #[test]
-    fn test_move_into_en_passant() {
-        let mut board = Board::from_fen("8/pp6/8/1P6/8/8/8/8 w ---- - 0 1").unwrap();
-        board.make_move(Move::new(8, 24)); // do double push
-        assert_eq!(board.grid[24], Some(Piece::Pawn(Color::Black)));
-        assert_eq!(board.en_passant_square, Some(16));
-
-        board.make_move(Move::new(25, 16)); // do en passant
-        assert_eq!(board.grid[24], None);
-
-        board.make_move(Move::new(9, 17)); // singal push
-        board.make_move(Move::new(16, 9)); // try take
-        assert_eq!(board.grid[17], Some(Piece::Pawn(Color::Black)));
+        Ok(())
     }
 }

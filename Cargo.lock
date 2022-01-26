@@ -82,6 +82,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cheseng-cli"
+version = "0.1.0"
+dependencies = [
+ "cheseng",
+]
+
+[[package]]
 name = "cheseng-ui"
 version = "0.1.0"
 dependencies = [

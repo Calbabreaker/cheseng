@@ -1,4 +1,4 @@
-use crate::{Board, Move};
+use crate::{Board, Move, MoveFlag};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Color {
@@ -36,17 +36,17 @@ impl Piece {
             return;
         }
 
-        macro_rules! handle_data {
-            () => {
-                (moves, piece_index, piece_color, board)
+        macro_rules! handle_sliding_piece {
+            ($start: expr, $end: expr) => {
+                handle_sliding_piece(moves, piece_index, piece_color, &board, $start, $end)
             };
         }
 
         let grid_index = piece_index as usize;
         match self {
-            Piece::Queen(_) => handle_sliding_piece(handle_data!(), 0, 8),
-            Piece::Rook(_) => handle_sliding_piece(handle_data!(), 0, 4),
-            Piece::Bishop(_) => handle_sliding_piece(handle_data!(), 4, 8),
+            Piece::Queen(_) => handle_sliding_piece!(0, 8),
+            Piece::Rook(_) => handle_sliding_piece!(0, 4),
+            Piece::Bishop(_) => handle_sliding_piece!(4, 8),
             Piece::King(_) => {
                 for (dir_index, offset) in DIRECTION_OFFSETS.iter().enumerate() {
                     // is outside bounds
@@ -79,12 +79,11 @@ impl Piece {
                 }
             }
             Piece::Pawn(_) => {
-                let (sign, first_rank, promotion_rank) = match piece_color {
-                    Color::White => (-1, 6, 0),
-                    Color::Black => (1, 1, 7),
+                let (forward_offset, first_rank, attack_dir_iter) = match piece_color {
+                    Color::White => (-8, 6, 4..6),
+                    Color::Black => (8, 1, 6..8),
                 };
 
-                let forward_offset = 8 * sign;
                 let end_index = piece_index as i8 + forward_offset;
                 if board.grid[end_index as usize].is_none() {
                     moves.push(Move::new(piece_index, end_index as u8));
@@ -93,41 +92,70 @@ impl Piece {
                     if piece_index / 8 == first_rank {
                         let end_index = end_index + forward_offset;
                         if board.grid[end_index as usize].is_none() {
-                            moves.push(Move::new(piece_index, end_index as u8));
+                            moves.push(
+                                Move::new(piece_index, end_index as u8)
+                                    .flag(MoveFlag::PawnDoublePush),
+                            );
                         }
                     }
                 }
 
-                // diagonal moves
-                for offset in &[7, 9] {
-                    let offset = offset * sign;
+                // diagonal captures
+                for dir_index in attack_dir_iter {
+                    let offset = DIRECTION_OFFSETS[dir_index];
                     let end_index = (piece_index as i8 + offset) as u8;
                     if let Some(end_piece) = board.grid[end_index as usize] {
-                        // only allow capture moves if going diagonal
-                        if *end_piece.get_color() != piece_color {
+                        // check different colour and out of bounds (prevents wrapping)
+                        if *end_piece.get_color() != piece_color
+                            && NUM_TIMES_TO_EDGE[end_index as usize][dir_index] != 0
+                        {
                             moves.push(Move::new(piece_index, end_index));
                         }
                     }
 
                     // check for en passant
-                    if board.en_passant_square == Some(end_index as u8) {
-                        moves.push(Move::new(piece_index, end_index));
+                    if board.en_passant_square == Some(end_index) {
+                        moves.push(
+                            Move::new(piece_index, end_index).flag(MoveFlag::EnPassantCapture),
+                        );
                     }
                 }
             }
         };
     }
+
+    pub fn get_char(&self) -> char {
+        match self {
+            Self::King(Color::White) => '♚',
+            Self::Queen(Color::White) => '♛',
+            Self::Rook(Color::White) => '♜',
+            Self::Knight(Color::White) => '♞',
+            Self::Bishop(Color::White) => '♝',
+            Self::Pawn(Color::White) => '♟',
+
+            Self::King(Color::Black) => '♔',
+            Self::Queen(Color::Black) => '♕',
+            Self::Rook(Color::Black) => '♖',
+            Self::Knight(Color::Black) => '♘',
+            Self::Bishop(Color::Black) => '♗',
+            Self::Pawn(Color::Black) => '♙',
+        }
+    }
 }
 
-type HandleData<'a> = (&'a mut Vec<Move>, u8, Color, &'a Board);
+impl std::fmt::Display for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.get_char())
+    }
+}
 
 // Array containing the index offset needed to move once in a direction as an index in the order:
-// (N, S, W, E, NE, SW, NW, SE) assuming origin is top left
-const DIRECTION_OFFSETS: [i8; 8] = [-8, 8, -1, 1, -7, 7, -9, 9];
+// (N, S, W, E, NW, NE, SW, SE) assuming origin is top left
+const DIRECTION_OFFSETS: [i8; 8] = [-8, 8, -1, 1, -9, -7, 7, 9];
 
 lazy_static::lazy_static! {
     // Array containing the number of times needed to move in a direction as an index in the order:
-    // (N, S, W, E, NE, SW, NW, SE) to get to the edge of the grid for each square.
+    // (N, S, W, E, NW, NE, SW, SE) to get to the edge of the grid for each square.
     // TODO: when const_for is stabilized, change this to a const array
     static ref NUM_TIMES_TO_EDGE: [[i8; 8]; 64] = calc_num_times_to_edge();
 }
@@ -138,7 +166,10 @@ lazy_static::lazy_static! {
 }
 
 fn handle_sliding_piece(
-    (moves, piece_index, piece_color, board): HandleData,
+    moves: &mut Vec<Move>,
+    piece_index: u8,
+    piece_color: Color,
+    board: &Board,
     dir_index_start: usize,
     dir_index_end: usize,
 ) {
@@ -180,9 +211,9 @@ fn calc_num_times_to_edge() -> [[i8; 8]; 64] {
             num_south,
             num_west,
             num_east,
+            i8::min(num_north, num_west),
             i8::min(num_north, num_east),
             i8::min(num_south, num_west),
-            i8::min(num_north, num_west),
             i8::min(num_south, num_east),
         ]
     }

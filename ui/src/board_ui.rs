@@ -67,8 +67,8 @@ impl BoardUI {
                     .iter()
                     .find(|legal_move| legal_move.end_index == end_index);
 
-                if let Some(legal_move) = legal_move {
-                    // play capture sound if capture else normal move
+                if let Some(&legal_move) = legal_move {
+                    // play capture sound if capture else normal move sound
                     play_sound(
                         if self.board.move_is_capture(legal_move) {
                             self.capture_sound
@@ -78,8 +78,8 @@ impl BoardUI {
                         PlaySoundParams::default(),
                     );
 
-                    self.board
-                        .make_move(cheseng::Move::new(piece.index, end_index));
+                    self.board.make_move(legal_move);
+                    println!("{}", self.board);
                 }
             }
         }
@@ -134,8 +134,8 @@ impl BoardUI {
 
     fn draw_moves_hints(&self, screen_view: &SquareViewport, moves: &Vec<cheseng::Move>) {
         let cell_size = screen_view.cell_size;
-        for move_ in moves {
-            let board_pos: cheseng::Position = move_.end_index.into();
+        for &move_draw in moves {
+            let board_pos: cheseng::Position = move_draw.end_index.into();
             let screen_pos = screen_view.board_to_screen_pos(board_pos);
 
             // if mouse on move then highlight it
@@ -152,7 +152,7 @@ impl BoardUI {
             }
 
             const MOVE_HINT_COLOR: Color = color_u8!(89, 133, 41, 255);
-            if self.board.move_is_capture(move_) {
+            if self.board.move_is_capture(move_draw) {
                 // draw captures
                 draw_rectangle_lines(
                     screen_pos.x,
