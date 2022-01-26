@@ -79,7 +79,6 @@ impl BoardUI {
                     );
 
                     self.board.make_move(legal_move);
-                    println!("{}", self.board);
                 }
             }
         }

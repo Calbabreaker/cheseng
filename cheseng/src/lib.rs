@@ -8,4 +8,4 @@ pub use board::Board;
 pub use error::Error;
 pub use piece::{Color, Piece};
 pub use position::{pos, Position};
-pub use r#move::{Move, MoveFlag};
+pub use r#move::{Move, MoveFlag, Side};

@@ -1,10 +1,28 @@
-use crate::{Error, Position};
+use crate::{Error, Piece, Position};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Side {
+    Queen,
+    King,
+}
+
+impl Side {
+    pub fn as_index(&self) -> usize {
+        match self {
+            Self::Queen => 0,
+            Self::King => 1,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum MoveFlag {
     None,
     EnPassantCapture,
     PawnDoublePush,
+    Castle(Side),
+    Promote(Piece),
+    PromoteKnight,
 }
 
 #[derive(Debug, Clone, Copy)]

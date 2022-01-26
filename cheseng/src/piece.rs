@@ -1,9 +1,18 @@
-use crate::{Board, Move, MoveFlag};
+use crate::{Board, Move, MoveFlag, Side};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Color {
     White,
     Black,
+}
+
+impl Color {
+    pub fn as_index(&self) -> usize {
+        match self {
+            Self::White => 0,
+            Self::Black => 1,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -49,7 +58,7 @@ impl Piece {
             Piece::Bishop(_) => handle_sliding_piece!(4, 8),
             Piece::King(_) => {
                 for (dir_index, offset) in DIRECTION_OFFSETS.iter().enumerate() {
-                    // is outside bounds
+                    // ensure not ouside bounds
                     if NUM_TIMES_TO_EDGE[grid_index][dir_index] == 0 {
                         continue;
                     }
@@ -62,8 +71,29 @@ impl Piece {
                         }
                     }
 
+                    // check not ouside bounds
                     moves.push(Move::new(piece_index, end_index as u8));
                 }
+
+                // check castling
+                let first_rank_index = match piece_color {
+                    Color::White => 56,
+                    Color::Black => 0,
+                };
+
+                macro_rules! check_castle {
+                    ($rook_file: expr, $end_file: expr, $side: expr) => {
+                        if board.castle_rights[piece_color.as_index()][$side.as_index()] {
+                            moves.push(
+                                Move::new(piece_index, first_rank_index as u8 + $end_file)
+                                    .flag(MoveFlag::Castle($side)),
+                            );
+                        }
+                    };
+                }
+
+                check_castle!(0, 2, Side::Queen);
+                check_castle!(7, 6, Side::King);
             }
             Piece::Knight(_) => {
                 for offset in &KNIGHT_MOVES[grid_index] {
@@ -79,18 +109,23 @@ impl Piece {
                 }
             }
             Piece::Pawn(_) => {
-                let (forward_offset, first_rank, attack_dir_iter) = match piece_color {
-                    Color::White => (-8, 6, 4..6),
-                    Color::Black => (8, 1, 6..8),
+                let (forward_offset, second_rank, last_rank, attack_dir_iter) = match piece_color {
+                    Color::White => (-8, 6, 1, 4..6),
+                    Color::Black => (8, 1, 6, 6..8),
                 };
 
-                let end_index = piece_index as i8 + forward_offset;
+                let mut end_index = piece_index as i8 + forward_offset;
+                let about_to_promote = piece_index / 8 == last_rank;
                 if board.grid[end_index as usize].is_none() {
-                    moves.push(Move::new(piece_index, end_index as u8));
+                    if about_to_promote {
+                        add_promote_moves(moves, piece_index, piece_color, end_index as u8);
+                    } else {
+                        moves.push(Move::new(piece_index, end_index as u8));
+                    }
 
                     // on first rank, do double push
-                    if piece_index / 8 == first_rank {
-                        let end_index = end_index + forward_offset;
+                    if piece_index / 8 == second_rank {
+                        end_index += forward_offset;
                         if board.grid[end_index as usize].is_none() {
                             moves.push(
                                 Move::new(piece_index, end_index as u8)
@@ -107,9 +142,13 @@ impl Piece {
                     if let Some(end_piece) = board.grid[end_index as usize] {
                         // check different colour and out of bounds (prevents wrapping)
                         if *end_piece.get_color() != piece_color
-                            && NUM_TIMES_TO_EDGE[end_index as usize][dir_index] != 0
+                            && NUM_TIMES_TO_EDGE[grid_index][dir_index] != 0
                         {
-                            moves.push(Move::new(piece_index, end_index));
+                            if about_to_promote {
+                                add_promote_moves(moves, piece_index, piece_color, end_index as u8);
+                            } else {
+                                moves.push(Move::new(piece_index, end_index));
+                            }
                         }
                     }
 
@@ -163,6 +202,14 @@ lazy_static::lazy_static! {
 lazy_static::lazy_static! {
     // Array representing grid containing the possible knight moves (offset) for that grid index
     static ref KNIGHT_MOVES: [Vec<i8>; 64] = calc_knight_moves();
+}
+
+fn add_promote_moves(moves: &mut Vec<Move>, piece_index: u8, piece_color: Color, end_index: u8) {
+    let base_move = Move::new(piece_index, end_index);
+    moves.push(base_move.flag(MoveFlag::Promote(Piece::Queen(piece_color))));
+    moves.push(base_move.flag(MoveFlag::Promote(Piece::Rook(piece_color))));
+    moves.push(base_move.flag(MoveFlag::Promote(Piece::Bishop(piece_color))));
+    moves.push(base_move.flag(MoveFlag::Promote(Piece::Knight(piece_color))));
 }
 
 fn handle_sliding_piece(
